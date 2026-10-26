@@ -5,3 +5,7 @@
 *.c text eol=lf
 *.sh text eol=lf
 *.md text eol=lf
+*.entitlements text eol=lf
+/Manual.html text eol=lf
+/Manual.txt text eol=lf
+/App/Sources/RemSoundCore/Resources/web-listener.html text eol=lf

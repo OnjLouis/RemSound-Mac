@@ -6,6 +6,22 @@ import RemSoundCore
 @MainActor final class NativeEventClaimsTests: XCTestCase {
     private let file = "App/Sources/RemSoundApp/Window.swift"
     private let reason = "The actual named native driver calls this file's production event routine."
+    func testCurrentProductionRegistryMatchesActualSourceWithoutClaimingPendingDrivers() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        var sources: [String: String] = [:]
+        for directory in ["App/Sources", "App/Packages/RemSoundJam/Sources", "App/Packages/RemSoundRuntime/Sources", "Plugin/Source"] {
+            let files = try XCTUnwrap(FileManager.default.enumerator(at: root.appendingPathComponent(directory),
+                includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]))
+            for case let file as URL in files where ["swift", "c", "h", "cpp", "mm"].contains(file.pathExtension) {
+                sources[String(file.path.dropFirst(root.path.count + 1))] = try String(contentsOf: file)
+            }
+        }
+        let counts = NativeEventClaims.census(sources)
+        let result = NativeEventClaims.inspect(sources: sources, stepNames: ProductTestPack.names)
+        XCTAssertEqual(result.failures.filter { !$0.hasPrefix("events.native.unverified-driver-") }, [], "Actual counts: \(counts)")
+        XCTAssertFalse(result.failures.isEmpty, "Pending native drivers must remain explicitly unverified")
+    }
     func testSelectorsDelegatesClosuresTimersAndSwiftUIButtonCountOnOneLine() {
         let code = """
             // ignored.action = #selector(no)

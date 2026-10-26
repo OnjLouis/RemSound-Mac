@@ -44,6 +44,9 @@ public struct ReadingsSchema: Sendable {
 
     /// A field as CSV has it: quoted when it holds a comma, a quote or a line break.
     public static func csv(_ field: String) -> String {
+        // Peer-controlled text must stay text when a spreadsheet opens the CSV.
+        let first = field.drop(while: { $0.isWhitespace }).first
+        let field = first.map { "=+-@".contains($0) } == true ? "'" + field : field
         guard field.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" || $0 == "\r" }) else { return field }
         return "\"" + field.replacingOccurrences(of: "\"", with: "\"\"") + "\""
     }

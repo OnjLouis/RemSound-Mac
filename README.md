@@ -39,7 +39,7 @@ This manual covers the Mac app and its AU, VST3 and CLAP plugins. Mac and Window
 
 ## What's new
 
-Version 6.2.4 brings the further logging improvements from RemSound for Windows. The log now holds just what happened, and every line starts with INFO, WARN or ERROR and a category, so you can search for the problems. A peer disconnecting says why, and each connection ends with a short summary. A run of audible gaps is one line when it starts and one when it ends. Everything RemSound measures goes into a spreadsheet file beside the log, with a row for every minute, and every second around a problem. Preferences can open the current log and the logs folder.
+Version 6.2.4 makes troubleshooting easier without filling the log with numbers every second. Events and warnings stay in the log; measurements go into a separate CSV file you can open in Numbers or another spreadsheet. Connection messages explain when someone stops answering and summarise the connection. In Preferences, **Open current log** opens the active log and **Open logs folder** shows the files in Finder.
 
 Version 6.2.1 brings together the Mac connection, audio, recording and plugin work. Its features include:
 
@@ -333,11 +333,11 @@ Optional global shortcuts start unset. Focus a shortcut field and press the comb
 
 Enable logging only when you need it. The logging choice can be saved with the profile. Each run with logging on writes two files in the logs folder, named with the date and time it started and the Mac's name.
 
-The log holds just what happened. Every line starts with INFO, WARN or ERROR and a category, such as Peer, Gaps, Server or Network, so you can search for WARN or ERROR to find the problems. A peer disconnecting says why: it stopped answering and for how long, or this Mac's network changed or it woke from sleep just before. When it comes back, its line says how long it was gone, and each connection ends with a short summary. A run of audible gaps is one line when it starts and one when it ends.
+The log records events rather than a continuous stream of measurements. Each line starts with INFO, WARN or ERROR and a category, such as Peer, Gaps, Server or Network. Search for WARN or ERROR to find problems. When someone disconnects, the log says how long they have stopped answering and whether your Mac recently changed network or woke from sleep. These are useful clues, not proof of what caused the disconnection. Reconnecting and ending a connection are recorded too. Repeated audio gaps are grouped into an episode, with a fresh warning if a gap becomes noticeably longer.
 
-Everything RemSound measures goes into the readings file beside the log, ending in readings.csv, which opens in a spreadsheet. It has a row for every minute, summing that minute up, and a row for every second only around a problem. A reading is written only while the thing it measures is in use. The readings file is written a few minutes behind, so a problem can keep the minutes before it.
+The measurements go into a separate file ending in **-readings.csv**. Open it in Numbers or another spreadsheet. It contains minute summaries, plus detailed seconds around a problem; unused measurements stay blank. Recent seconds wait in memory for up to five minutes, allowing RemSound to keep the lead-up to a problem without writing every second of an uneventful session.
 
-**Write logs now** keeps the five minutes before it in the readings file and writes everything straight away. **Open current log** and **Open logs folder** take you to them. You can also choose a log folder, or delete old logs, using Preferences. Inspect logs before sharing them because connection names and addresses may be useful diagnostic details.
+When something goes wrong, choose **Write logs now** in Preferences. This saves the available detail from the previous five minutes and writes the pending log data so it is ready to read or share. **Open current log** opens the active log; **Open logs folder** shows the log and readings files in Finder. Logging must be on for an active log to exist. Preferences also lets you choose a folder or delete old logs; the current session's files are kept. Check the files before sharing them: they can contain connection names and addresses, though passwords, keys and audio are not written to these diagnostic files.
 
 ## Keyboard and VoiceOver
 

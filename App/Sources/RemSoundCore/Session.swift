@@ -3877,7 +3877,6 @@ extension Session {
         let totals = jam.receiveTotals
         machine.set("sending", sendingOn)
         machine.set("sendingTo", sendingOn ? sendTargets.count : 0)
-        machine.set("connectedPeers", jam.connectionLog.connectedCount)
         machine.set("sendFailuresTotal", audioSendFailures)
         machine.set("canPlayJamulusStyle", jam.canDecode.count(now: now))
         machine.set("audibleGapsTotal", totals.audibleGaps)
@@ -3893,6 +3892,7 @@ extension Session {
 
         // Each incoming stream: its own row, its gaps for the run-of-gaps lines, and its peer's share for the connection's.
         var newGaps = 0
+        var longestGapMs = 0
         var gapsByStream: [String: Int] = [:]
         var perPeer: [String: (packets: Int, gaps: Int, filledIn: Int, lowest: Double?)] = [:]
         for (key, stream) in streams.sorted(by: { $0.key < $1.key }) {
@@ -3921,6 +3921,7 @@ extension Session {
             if ClockKeeping.on { row.set("clockPpm", stream.clockPpm) }
             rows.append(row)
             newGaps += figures.underruns
+            longestGapMs = max(longestGapMs, Int(ceil(figures.longestUnderrunMs)))
             if figures.underruns > 0 { gapsByStream["\(peerName) on \(codec)", default: 0] += figures.underruns }
             var share = perPeer[address] ?? (packets: 0, gaps: 0, filledIn: 0, lowest: nil)
             share.packets += figures.packets
@@ -4028,10 +4029,12 @@ extension Session {
             machine.text("metronome", jam.metronome.describe())
         }
         machine.text("observations", observations.isEmpty ? nil : observations.joined(separator: " | "))
+        let connectionLines = jam.connectionLog.second(date, seen)
+        machine.set("connectedPeers", jam.connectionLog.connectedCount)
         file.readings(machine, rows, at: date)
 
         // What happened: a run of gaps is one line when it starts (and if it gets clearly worse) and one when it ends.
-        for change in jam.gapEpisodes.second(date, newGaps: newGaps, byStream: gapsByStream) {
+        for change in jam.gapEpisodes.second(date, newGaps: newGaps, longestGapMs: longestGapMs, byStream: gapsByStream) {
             switch change.kind {
             case .started, .worse:
                 let kept = file.capture(lookBack: 30, at: date)
@@ -4042,7 +4045,7 @@ extension Session {
                 file.event(.warn, "Gaps", change.words, at: date)
             }
         }
-        for line in jam.connectionLog.second(date, seen) {
+        for line in connectionLines {
             let kept = line.captureLookBack.flatMap { file.capture(lookBack: $0, at: date) }
             file.event(line.level, "Peer", line.text + (kept.map { " - kept: \($0)" } ?? ""), at: date)
         }

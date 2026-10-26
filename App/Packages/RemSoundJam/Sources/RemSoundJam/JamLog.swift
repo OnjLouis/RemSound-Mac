@@ -36,6 +36,7 @@ public final class JamLog {
     private var lastDay: String?
     private var recorder: ReadingsRecorder?
     private let everySecond: Bool
+    private let openFile: (URL) throws -> FileHandle
     private var closed = false
 
     private static func formatter(_ format: String) -> DateFormatter {
@@ -53,9 +54,17 @@ public final class JamLog {
     ///   - machine: whose log it is (the Mac's name, letters and digits only); "" leaves it out of the name.
     ///   - about: the program and version for the first line ("RemSound for Mac 6.2.4").
     ///   - everySecond: write every second's readings, not only around a problem (a test's or a deep dive's choice).
-    public init(directory: URL, prefix: String, machine: String = "", about: String = "RemSound for Mac",
+    public convenience init(directory: URL, prefix: String, machine: String = "", about: String = "RemSound for Mac",
                 maxBytes: Int = 20_000_000, readingsMaxBytes: Int = 50_000_000, keepDays: Int = 14,
                 everySecond: Bool = false, now: Date = Date()) {
+        self.init(directory: directory, prefix: prefix, machine: machine, about: about, maxBytes: maxBytes,
+                  readingsMaxBytes: readingsMaxBytes, keepDays: keepDays, everySecond: everySecond, now: now,
+                  openFile: { try FileHandle(forWritingTo: $0) })
+    }
+
+    init(directory: URL, prefix: String, machine: String = "", about: String = "RemSound for Mac",
+         maxBytes: Int = 20_000_000, readingsMaxBytes: Int = 50_000_000, keepDays: Int = 14,
+         everySecond: Bool = false, now: Date = Date(), openFile: @escaping (URL) throws -> FileHandle) {
         self.directory = directory
         self.prefix = prefix
         self.machine = machine
@@ -64,6 +73,7 @@ public final class JamLog {
         self.readingsMaxBytes = readingsMaxBytes
         self.keepDays = keepDays
         self.everySecond = everySecond
+        self.openFile = openFile
         var stem = "\(prefix)-\(Self.named.string(from: now))" + (machine.isEmpty ? "" : "-\(machine)")
         // Two runs in one minute: the second gets -2, and so on.
         let base = stem
@@ -137,14 +147,20 @@ public final class JamLog {
             if rolling { readingsPart += 1 }
             let url = directory.appendingPathComponent(stem + "-readings" + (readingsPart > 1 ? "-part\(readingsPart)" : "") + ".csv")
             (readingsHandle, readingsWritten) = open(url)
-            currentReadingsFile = url
-            if rolling, let recorder, !line.hasPrefix("Time,") {
+            currentReadingsFile = readingsHandle == nil ? nil : url
+            if rolling || readingsWritten == 0, let recorder, !line.hasPrefix("Time,") {
                 let header = Data((recorder.headerLine + "\n").utf8)
-                readingsHandle?.write(header)
+                guard write(header, to: readingsHandle) else {
+                    readingsHandle = nil; currentReadingsFile = nil
+                    return
+                }
                 readingsWritten += header.count
             }
         }
-        readingsHandle?.write(data)
+        guard write(data, to: readingsHandle) else {
+            readingsHandle = nil; currentReadingsFile = nil
+            return
+        }
         readingsWritten += data.count
     }
 
@@ -155,7 +171,10 @@ public final class JamLog {
         for line in pending {
             let data = Data((line + "\n").utf8)
             if handle == nil || (written + batch.count + data.count > maxBytes && written + batch.count > 0) {
-                if let handle, !batch.isEmpty { handle.write(batch); written += batch.count }
+                if let handle, !batch.isEmpty {
+                    if write(batch, to: handle) { written += batch.count }
+                    else { self.handle = nil; currentFile = nil }
+                }
                 batch = Data()
                 let rolling = handle != nil
                 try? handle?.close()
@@ -163,14 +182,20 @@ public final class JamLog {
                 if rolling { part += 1 }
                 let url = directory.appendingPathComponent(stem + (part > 1 ? "-part\(part)" : "") + ".log")
                 (handle, written) = open(url)
-                currentFile = url
+                currentFile = handle == nil ? nil : url
             }
             batch.append(data)
         }
         pending = []
         guard let handle else { return }
-        handle.write(batch)
-        written += batch.count
+        if write(batch, to: handle) { written += batch.count }
+        else { self.handle = nil; currentFile = nil }
+    }
+
+    private func write(_ data: Data, to handle: FileHandle?) -> Bool {
+        guard let handle else { return false }
+        do { try handle.write(contentsOf: data); return true }
+        catch { try? handle.close(); return false }
     }
 
     /// Stop. `keepReadings`: what waits is written first (RemSound stopping); false lets it go (logging switched off -
@@ -188,7 +213,7 @@ public final class JamLog {
     private func open(_ url: URL) -> (FileHandle?, Int) {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         if !FileManager.default.fileExists(atPath: url.path) { FileManager.default.createFile(atPath: url.path, contents: nil) }
-        let handle = try? FileHandle(forWritingTo: url)
+        let handle = try? openFile(url)
         _ = try? handle?.seekToEnd()
         let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
         return (handle, size)

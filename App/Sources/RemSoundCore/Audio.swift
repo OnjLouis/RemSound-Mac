@@ -760,14 +760,16 @@ final class StreamDecoder {
     private var intervalDiagnostics = StreamIntervalDiagnostics()
     private var lastLoggedTrimmedFrames = 0, lastLoggedTrims = 0
     func takeLogFigures() -> (packets: Int, maxGapMs: Double, concealed: Int, underruns: Int,
-                             interval: StreamIntervalDiagnostics.Snapshot, trimmedFrames: Int, trims: Int) {
+                             interval: StreamIntervalDiagnostics.Snapshot, trimmedFrames: Int, trims: Int,
+                             longestUnderrunMs: Double) {
         defer {
             logPackets = 0; logConcealed = 0; logUnderruns = 0; logMaxGapMs = 0
             lastLoggedTrimmedFrames = queue.trimmedFrames
             lastLoggedTrims = queue.trims
         }
         return (logPackets, logMaxGapMs, logConcealed, logUnderruns, intervalDiagnostics.take(),
-                max(0, queue.trimmedFrames - lastLoggedTrimmedFrames), max(0, queue.trims - lastLoggedTrims))
+                max(0, queue.trimmedFrames - lastLoggedTrimmedFrames), max(0, queue.trims - lastLoggedTrims),
+                Double(queue.takeLongestUnderrunFrames()) * 1_000 / Double(Wire.sampleRate))
     }
     private func noteArrival() {
         let now = clock()

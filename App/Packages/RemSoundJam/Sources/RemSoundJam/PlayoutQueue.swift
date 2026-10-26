@@ -102,6 +102,7 @@ public final class PlayoutQueue {
     /// Stereo frames displaced by the capacity cap, separate from click trims and manual skips.
     public private(set) var overflowDroppedFrames = 0
     private var underruns = 0
+    private var underrunFrames = 0, longestUnderrunFrames = 0
     public private(set) var hasAudio = false
     /// A line for the log (a snap, a hand-lowered skip).
     public var onEvent: ((String) -> Void)?
@@ -135,6 +136,12 @@ public final class PlayoutQueue {
         return underruns
     }
 
+    /// Longest contiguous output shortfall since last asked; observing it does not affect playback or tuning.
+    public func takeLongestUnderrunFrames() -> Int {
+        defer { longestUnderrunFrames = 0 }
+        return longestUnderrunFrames
+    }
+
     /// Start again: the sender restarted.
     public func reset(now: Double) {
         samples.removeAll(keepingCapacity: true)
@@ -144,6 +151,7 @@ public final class PlayoutQueue {
         concealment.reset()
         largestWriteFrames = 0
         underruns = 0
+        underrunFrames = 0; longestUnderrunFrames = 0
         drift.reset()
         stopResampling()
         steering = DepthSteering()
@@ -305,7 +313,10 @@ public final class PlayoutQueue {
             resampling = true
             var output = resampler.pull(input, outFrames: frames, ratio: ratio)
             offset += take * 2
-            if take < need { noteUnderrun() }
+            if take < need {
+                // Convert missing resampler input to its corresponding output duration.
+                noteUnderrun(frames: Int(ceil(Double(need - take) * Double(frames) / Double(need))), resumed: take > 0)
+            } else { underrunFrames = 0 }
             if need > 0 && take == 0 { return concealment.empty(frames: frames, artifact: artifact) }
             // A zero-input pull still contains held real audio and must resolve a pending fade.
             concealment.real(&output, lastFrame: tail, artifact: artifact)
@@ -317,16 +328,20 @@ public final class PlayoutQueue {
         offset += take
         if take < count {
             output.append(contentsOf: repeatElement(0, count: count - take))
-            noteUnderrun()
-        }
+            noteUnderrun(frames: (count - take) / 2, resumed: take > 0)
+        } else { underrunFrames = 0 }
         if take == 0 { return concealment.empty(frames: frames, artifact: artifact) }
         concealment.real(&output, lastFrame: tail, artifact: artifact)
         return output
     }
 
-    private func noteUnderrun() {
+    private func noteUnderrun(frames: Int, resumed: Bool) {
         underruns += 1
         underrunsTotal += 1
+        if resumed { underrunFrames = 0 }
+        let (total, overflow) = underrunFrames.addingReportingOverflow(frames)
+        underrunFrames = overflow ? Int.max : total
+        longestUnderrunFrames = max(longestUnderrunFrames, underrunFrames)
     }
 }
 
